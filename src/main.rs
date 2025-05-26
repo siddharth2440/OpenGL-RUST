@@ -1,7 +1,6 @@
-use std::{process, ptr::null};
+use std::{ ffi::CString, process, ptr::null};
 
-use gl::VERTEX_ARRAY;
-use glfw::{fail_on_errors, Action, Context, Key};
+use glfw::{fail_on_errors, ffi::glfwGetTime, Action, Context, Key};
 
 mod other_shapes {
     pub mod bothsidebyside;
@@ -10,13 +9,21 @@ mod other_shapes {
     pub mod traingle_rect;
 }
 
+mod shaders {
+    pub mod shader;
+}
+
 fn create_vertex_shader() -> String {
     let v_shader = r#"
         #version 330 core
         layout (location = 0) in vec3 aPos;
+        
+        out vec4 vertexColor;
 
-        void main(){
-            gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+        void main()
+        {
+            gl_Position = vec4(aPos, 1.0);
+            vertexColor = vec4(0.5, 0.0, 0.0, 1.0);
         }
     "#;
 
@@ -28,9 +35,11 @@ fn create_fragment_shader() -> String {
     let f_shader = r#"
         #version 330 core
         out vec4 FragColor;
+        
+        uniform vec4 ourColor;
 
         void main(){
-            FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+            FragColor = ourColor;
         }
     "#;
 
@@ -39,7 +48,6 @@ fn create_fragment_shader() -> String {
 
 
 fn main(){
-
     // Parallelogram Vertices
     let llgm_vertices: [[f32;3];4] = [
         [ -0.6, -0.4, 0.0 ],  // Bottom left
@@ -98,6 +106,11 @@ fn main(){
         gl::Viewport(0, 0, screen_width, screen_height);
         gl::ClearColor(0.0, 0.1, 0.1, 1.0);
 
+        // Check for Max Number of attributes we are allowed ( this is already set by the Hardware )
+        let mut attributes = 0;
+        gl::GetIntegerv(gl::MAX_VERTEX_ATTRIBS, &mut attributes);
+        println!("Max attributes we can have is -> {:?}", attributes);
+
         // VAO settings
         let mut vao = 0;
         gl::GenVertexArrays(1, &mut vao);
@@ -107,75 +120,37 @@ fn main(){
         let mut vbo = 0;
         gl::GenBuffers(1, &mut vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        // gl::BufferData( 
-        //     gl::ARRAY_BUFFER, 
-        //     std::mem::size_of_val(&rhombus_vertices) as isize  ,
-        //     rhombus_vertices.as_ptr().cast(), 
-        //     gl::STATIC_DRAW );
         gl::BufferData( 
             gl::ARRAY_BUFFER, 
-            std::mem::size_of_val(&llgm_vertices) as isize  ,
-            llgm_vertices.as_ptr().cast(), 
+            std::mem::size_of_val(&rhombus_vertices) as isize  ,
+            rhombus_vertices.as_ptr().cast(), 
             gl::STATIC_DRAW );
+        // gl::BufferData( 
+        //     gl::ARRAY_BUFFER, 
+        //     std::mem::size_of_val(&llgm_vertices) as isize  ,
+        //     llgm_vertices.as_ptr().cast(), 
+        //     gl::STATIC_DRAW );
         
         // EBO settings
         let mut ebo = 0;
         gl::GenBuffers(1, &mut ebo);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-        // gl::BufferData(
-        //     gl::ELEMENT_ARRAY_BUFFER, 
-        //     std::mem::size_of_val(&indices) as isize , 
-        //     indices.as_ptr().cast(), 
-        //     gl::STATIC_DRAW
-        // );
         gl::BufferData(
             gl::ELEMENT_ARRAY_BUFFER, 
-            std::mem::size_of_val(&llgm_indices) as isize , 
+            std::mem::size_of_val(&indices) as isize , 
             indices.as_ptr().cast(), 
             gl::STATIC_DRAW
         );
+        // gl::BufferData(
+        //     gl::ELEMENT_ARRAY_BUFFER, 
+        //     std::mem::size_of_val(&llgm_indices) as isize , 
+        //     indices.as_ptr().cast(), 
+        //     gl::STATIC_DRAW
+        // );
 
         // Set our VertexAttribPointer
         gl::VertexAttribPointer(0, 3 , gl::FLOAT, gl::FALSE, std::mem::size_of::< [ f32; 3 ] >().try_into().unwrap() , null() );
         gl::EnableVertexAttribArray(0);
-
-        // Doing the shaders part
-        let vertex_shader = create_vertex_shader();
-        let fragment_shader = create_fragment_shader();
-
-        let v_shader = gl::CreateShader(gl::VERTEX_SHADER);
-        assert_ne!( v_shader, 0 );
-
-        gl::ShaderSource( 
-                v_shader,
-                1, 
-                &vertex_shader.as_bytes().as_ptr().cast(),
-                &(vertex_shader.len().try_into().unwrap())
-        );
-        gl::CompileShader(v_shader);
-
-        let f_shader = gl::CreateShader(gl::FRAGMENT_SHADER);
-        assert_ne!( f_shader, 0 );
-        
-        gl::ShaderSource( 
-            f_shader , 
-            1, 
-            &fragment_shader.as_bytes().as_ptr().cast(), 
-            &(fragment_shader.len().try_into().unwrap())
-        );
-        gl::CompileShader(f_shader);
-
-        // gl program
-        let shader_program = gl::CreateProgram();
-        gl::AttachShader(shader_program, v_shader);
-        gl::AttachShader(shader_program, f_shader);
-        gl::LinkProgram(shader_program);
-
-        // Delete the Shaders
-        gl::DeleteShader(v_shader);
-        gl::DeleteShader(f_shader);
-
-        gl::UseProgram(shader_program);
 
         // chk for opengl errors
         let err = gl::GetError();
@@ -187,10 +162,54 @@ fn main(){
 
     while !window.should_close() {
         unsafe {
+
+            let vertex_shader = create_vertex_shader();
+            let fragment_shader = create_fragment_shader();
+
+            let v_shader = gl::CreateShader(gl::VERTEX_SHADER);
+            assert_ne!( v_shader, 0 );
+
+            gl::ShaderSource( 
+                    v_shader,
+                    1, 
+                    &vertex_shader.as_bytes().as_ptr().cast(),
+                    &(vertex_shader.len().try_into().unwrap())
+            );
+            gl::CompileShader(v_shader);
+
+            let f_shader = gl::CreateShader(gl::FRAGMENT_SHADER);
+            assert_ne!( f_shader, 0 );
+            
+            gl::ShaderSource( 
+                f_shader ,
+                1, 
+                &fragment_shader.as_bytes().as_ptr().cast(), 
+                &(fragment_shader.len().try_into().unwrap())
+            );
+            gl::CompileShader(f_shader);
+
+            // gl program
+            let shader_program = gl::CreateProgram();
+            gl::AttachShader(shader_program, v_shader);
+            gl::AttachShader(shader_program, f_shader);
+            gl::LinkProgram(shader_program);
+
+            let time_value = glfwGetTime();
+            let sin_value = time_value.sin();
+            let green_value = (sin_value / 2.0) + 0.5;
+
+            let uniform_name = CString::new("ourColor").expect("CString conversion failed");
+            let uniform_location = gl::GetUniformLocation(shader_program, uniform_name.as_ptr() as *const i8);
+            
+            if uniform_location != -1 {
+                gl::UseProgram(shader_program);
+                gl::Uniform4f(uniform_location, 0.0, green_value as f32, 0.7, 1.0);
+            }
+
+
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT , null());
-            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT , null());
-            gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+            // gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
             let opengl_err = gl::GetError();
             if opengl_err != gl::NO_ERROR {
                 eprintln!("There is an Error in OpenGL Configs, Chk again");
