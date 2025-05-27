@@ -1,6 +1,7 @@
-use std::{ ffi::CString, process, ptr::null};
+use std::{ ffi::CString, fs::File, io::Read, process, ptr::null};
 
 use glfw::{fail_on_errors, ffi::glfwGetTime, Action, Context, Key};
+use stb_image_rust::{stbi_image_free, stbi_load_from_memory, STBI_rgb_alpha};
 
 mod other_shapes {
     pub mod bothsidebyside;
@@ -17,13 +18,16 @@ fn create_vertex_shader() -> String {
     let v_shader = r#"
         #version 330 core
         layout (location = 0) in vec3 aPos;
-        
-        out vec4 vertexColor;
+        layout (location = 1) in vec3 aColor;
+        layout (location = 2) in vec2 aTexCoord;
 
-        void main()
-        {
+        out vec3 ourColor;
+        out vec2 TexCoord;
+
+        void main(){
             gl_Position = vec4(aPos, 1.0);
-            vertexColor = vec4(0.5, 0.0, 0.0, 1.0);
+            ourColor = aColor;
+            TexCoord = vec2(aTexCoord.x, aTexCoord.y);
         }
     "#;
 
@@ -35,11 +39,15 @@ fn create_fragment_shader() -> String {
     let f_shader = r#"
         #version 330 core
         out vec4 FragColor;
-        
-        uniform vec4 ourColor;
 
-        void main(){
-            FragColor = ourColor;
+        in vec3 ourColor;
+        in vec2 TexCoord;
+
+        uniform sampler2D texture1;
+
+        void main()
+        {
+            FragColor = texture(texture1, TexCoord);
         }
     "#;
 
@@ -64,8 +72,8 @@ fn main(){
 
     // Vertices for Rhombus
     let rhombus_vertices: [ [f32; 3]; 4 ] = [
-        [-0.4 , 0.0 , 0.0], // left
-        [0.0, -0.4, 0.0], // bottom
+        [0.4 , 0.0 , 0.0], // left
+        [0.0, 0.4, 0.0], // bottom
         [0.4, 0.0, 0.0],  // right
         [0.0, 0.4, 0.0] //  up
     ];
@@ -74,6 +82,14 @@ fn main(){
     let indices: [ u32; 6 ] = [
         0, 3, 2,
         2, 1, 0
+    ];
+
+    // Texture Corodinates for parallelogram
+    let texture_coordinates:[ [f32;3];4 ] = [
+        [-0.4 , 0.0 , 0.0],
+        [0.0, -0.4, 0.0],
+        [0.4, 0.0, 0.0],
+        [0.0, 0.4, 0.0]
     ];
     
     // Intialize our GLFW
@@ -150,8 +166,63 @@ fn main(){
 
         // Set our VertexAttribPointer
         gl::VertexAttribPointer(0, 3 , gl::FLOAT, gl::FALSE, std::mem::size_of::< [ f32; 3 ] >().try_into().unwrap() , null() );
-        gl::EnableVertexAttribArray(0);
+        gl::EnableVertexAttribArray(2);
 
+         // bind texture
+            let mut texture = 0;
+            gl::GenTextures(1, &mut texture);
+            gl::BindTexture(gl::TEXTURE_2D, texture);
+            // set the texture wrapping parameters
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::MIRRORED_REPEAT as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::MIRRORED_REPEAT as i32);
+
+            // let bordercolor:[f32;4] = [ 1.0,1.0,0.0,1.0 ];
+            // gl::TexParameterfv(gl::TEXTURE_2D, gl::TEXTURE_BORDER_COLOR, bordercolor as *const);
+
+            // set texture filtering parameters
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR_MIPMAP_LINEAR as i32);        
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            // load image and create texture texture and generate mipmaps  -> for image loading we'll be using "image" crate
+            let mut read_image_file = File::open("G:\\OpenGL-YT\\openglyt\\src\\assets\\wall.jpg").unwrap();
+            let mut contents:Vec<u8> = vec![];
+            read_image_file.read_to_end(&mut contents).unwrap();
+
+            let mut width = 0;
+            let mut height = 0;
+            let mut comp = 0;
+
+            let img = stbi_load_from_memory(
+                contents.as_mut_ptr(), 
+                contents.len() as i32, 
+                &mut height,
+                &mut width, 
+                &mut comp, 
+                STBI_rgb_alpha,
+            );
+
+            if img.is_null(){
+                println!("There is no image");
+            } else {
+                println!("Texture loaded Successfully");
+                gl::TexImage2D(
+                    gl::TEXTURE_2D, 
+                    0, 
+                    gl::RGB as i32, 
+                    width, 
+                    height,
+                    0, 
+                    gl::RGB, 
+                    gl::UNSIGNED_BYTE, 
+                    img as *const _,
+                );
+
+                gl::GenerateMipmap(gl::TEXTURE_2D);
+            }
+
+            // deallocate the image from memory
+            stb_image_rust::c_runtime::free(img);
+
+        
         // chk for opengl errors
         let err = gl::GetError();
         eprintln!("{:?}",err);
@@ -206,10 +277,13 @@ fn main(){
                 gl::Uniform4f(uniform_location, 0.0, green_value as f32, 0.7, 1.0);
             }
 
+            // gl::BindTexture(gl::TEXTURE_2D, texture);
+
 
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT , null());
             // gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+
             let opengl_err = gl::GetError();
             if opengl_err != gl::NO_ERROR {
                 eprintln!("There is an Error in OpenGL Configs, Chk again");
