@@ -2,10 +2,18 @@ use std::{ffi::CString, fs::File, io::Read, process, ptr::null};
 use glfw::{Action, Context, Key, fail_on_errors};
 use image::GenericImageView;
 
-use crate::shaders::shader::Shader;
+use crate::{lib::load_image::load_image_into_cpu, shaders::shader::Shader, textures::texture::Texture};
 
 mod shaders {
     pub mod shader;
+}
+
+mod textures {
+    pub mod texture;
+}
+
+mod lib {
+    pub mod load_image;
 }
 
 fn main() {
@@ -82,33 +90,41 @@ fn main() {
         gl::EnableVertexAttribArray(2);
     }
 
-    let img = image::open("G:\\OpenGL-YT\\openglyt\\src\\assets\\texture.jpg").expect("Failed to load texture");
-    let img = img.flipv().into_rgba8();
-    let (width, height) = img.dimensions();
-    let data = img.as_raw();
+    // let img = image::open("G:\\OpenGL-YT\\openglyt\\src\\assets\\wall.jpg").expect("Failed to load texture");
+    // let img_buf = img.flipv().into_rgba8();
+    // let (width, height) = img.dimensions();
+    // let data = img_buf.as_raw();
 
-    let mut texture = 0;
-    unsafe {
-        gl::GenTextures(1, &mut texture);
-        gl::BindTexture(gl::TEXTURE_2D, texture);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+    let ( width, height, data) = load_image_into_cpu("G:\\OpenGL-YT\\openglyt\\src\\assets\\wall.jpg");
+    // println!("Width -> {:?}",width);
+    // println!("Height -> {:?}",height);
+    // println!("Image_data -> {:?}",data);
 
-        gl::TexImage2D(
-            gl::TEXTURE_2D,
-            0,
-            gl::RGBA as i32,
-            width as i32,
-            height as i32,
-            0,
-            gl::RGBA,
-            gl::UNSIGNED_BYTE,
-            data.as_ptr() as *const _,
-        );
-        gl::GenerateMipmap(gl::TEXTURE_2D);
-    }
+    // let mut texture = 0;
+    let texture = Texture::new("G:\\OpenGL-YT\\openglyt\\src\\assets\\wall.jpg");
+    println!("Texture id -> {:?}", texture.id );
+    // unsafe {
+
+    //     gl::GenTextures(1, &mut texture);
+    //     gl::BindTexture(gl::TEXTURE_2D, texture);
+    //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
+    //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
+    //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+    //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+
+    //     gl::TexImage2D(
+    //         gl::TEXTURE_2D,
+    //         0,
+    //         gl::RGBA as i32,
+    //         width as i32,
+    //         height as i32,
+    //         0,
+    //         gl::RGBA,
+    //         gl::UNSIGNED_BYTE,
+    //         data.as_ptr() as *const _,
+    //     );
+    //     gl::GenerateMipmap(gl::TEXTURE_2D);
+    // }
 
     while !window.should_close() {
         glfw.poll_events();
@@ -123,7 +139,7 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
             gl::UseProgram(shader.id);
-            gl::BindTexture(gl::TEXTURE_2D, texture);
+            gl::BindTexture(gl::TEXTURE_2D, texture.id);
             gl::BindVertexArray(vao);
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null());
         }
