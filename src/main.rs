@@ -1,282 +1,133 @@
-use std::{process, ptr::null};
+use std::{ffi::CString, fs::File, io::Read, process, ptr::null};
+use glfw::{Action, Context, Key, fail_on_errors};
+use image::GenericImageView;
 
-use glfw::{fail_on_errors, Action, Context, Key};
+use crate::shaders::shader::Shader;
+
+mod shaders {
+    pub mod shader;
+}
 
 fn main() {
-    println!("lets draw Rhombus");
-
-    let c_vertex_shader:&str = r#"
-        #version 330 core
-        layout (location = 0) in vec3 aPos;
-
-        void main(){
-            gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
-        }
-    "#; 
-
-    let c_fragment_shader:&str = r#"
-        #version 330 core
-        out vec4 FragColor;
-
-        void main(){
-            FragColor = vec4(0.4f, 0.3f, 0.1f, 1.0f);
-        }
-    "#;
-
-    let c_fragment_shader1:&str = r#"
-        #version 330 core
-        out vec4 FragColor;
-
-        void main(){
-            FragColor = vec4(0.4f, 0.3f, 0.1f, 1.0f);
-        }
-    "#;
-    //   -------------------------------------------------   Rhombus ---------------------------------------------------
-    let rhombus_vertices:[ [f32; 3]; 4 ] = [
-        [-0.5,  0.0, 0.0],  // Left point (index 0)
-        [ 0.0,  0.5, 0.0],  // Top point (index 1)
-        [ 0.5,  0.0, 0.0],  // Right point (index 2)
-        [ 0.0, -0.5, 0.0]
-    ];
-    // Rhombus Vertices
-    let rhombus_indices:[u32; 6] = [
-        0, 1, 2, 
-        0, 2, 3
-    ];
-
-    //   -------------------------------------------------   Rhombus ---------------------------------------------------
-
-    //   ------------------------------------------------- Parallelogram -----------------------------------------------
-    let parallelogram_vertices:[ [f32;3];4 ] = [
-        [ -0.5, -0.5,  0.0 ],
-        [ -0.5, -0.5,  0.0 ],
-        [ -0.5, -0.5,  0.0 ],
-        [ -0.5, -0.5,  0.0 ]
-    ];
-
-    let parallelogram_indices: [u32; 6] = [
-        0, 1, 2,
-        0, 2, 3
-    ];
-
-
-    //   ------------------------------------------------- Parallelogram -----------------------------------------------
-
-    const HEIGHT:u32 = 600;
-    const WIDTH:u32 = 900;
-    const TITLE:&str = "lets draw a Rhombus";
-
-    // Initialize GLFW
-    let mut glfw_initialized = match  glfw::init(fail_on_errors!()) {
-        Ok(glfw) => glfw,
-        Err(e) => {
-            eprintln!("Error in GLFW initialization {:?}",e);
-            process::exit(1);
-        }
-    };
-
-    // Using GLFW let's create a window
-    let (mut window , events ) = match glfw_initialized.create_window(WIDTH, HEIGHT, TITLE, glfw::WindowMode::Windowed){
-        Some( win_options ) => win_options,
-        None => {
-            eprintln!("Error!, Window Creation");
-            process::exit(1)
-        }
-    };
-
-    let ( screen_width,screen_height ) = window.get_framebuffer_size();
-    
-    // load OpenGL
-    gl::load_with( | ptr | window.get_proc_address(ptr) as *const _ );
-    // Doing the GL stuff and then render our shape
-    let mut vao = 0; // intialize VERTEX ARRAY OBJECT
-    let mut vbo = 0; // initialize Vertex Buffer Object
-    let mut ebo = 0; // initialize Element Buffer Object
-
-    let mut vao1 = 0;
-    let mut vbo1 = 0;
-    let mut ebo1 = 0;
-
-    unsafe {
-        // Vertex Arrays
-        gl::GenVertexArrays( 1, &mut vao);
-        gl::BindVertexArray(vao);
-
-        gl::GenVertexArrays( 1, &mut vao1);
-        gl::BindVertexArray(vao1);
-
-        // Vertex Buffer
-        gl::GenBuffers(1, &mut vbo);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl::BufferData(
-            gl::ARRAY_BUFFER, 
-            std::mem::size_of_val(&rhombus_vertices) as isize, 
-            rhombus_vertices.as_ptr().cast(), // raw pointer
-            gl::STATIC_DRAW
-        );
-
-        gl::GenBuffers(1, &mut vbo1);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo1);
-        gl::BufferData(
-            gl::ARRAY_BUFFER, 
-            std::mem::size_of_val(&parallelogram_vertices) as isize, 
-            parallelogram_vertices.as_ptr().cast(), // raw pointer
-            gl::STATIC_DRAW
-        );
-
-        // Element Buffer
-        gl::GenBuffers(1, &mut ebo);
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-        gl::BufferData(
-            gl::ELEMENT_ARRAY_BUFFER,
-            std::mem::size_of_val(&rhombus_indices) as isize, 
-            rhombus_indices.as_ptr().cast(),
-            gl::STATIC_DRAW
-        );
-
-        gl::GenBuffers(1, &mut ebo1);
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo1);
-        gl::BufferData(
-            gl::ELEMENT_ARRAY_BUFFER,
-            std::mem::size_of_val(&parallelogram_indices) as isize, 
-            parallelogram_indices.as_ptr().cast(),
-            gl::STATIC_DRAW
-        );
-
-        // Set Vertex Atribute Array
-        gl::VertexAttribPointer(
-            0,
-            3,  // means number of coordinaes [ (x,y,z) -> 3] [ (x,y) -> 2]
-            gl::FLOAT, 
-            gl::FALSE, 
-            std::mem::size_of::<[f32;3]>() as i32, 
-            null()
-        );
-        gl::EnableVertexAttribArray(0);
-
-        gl::VertexAttribPointer(
-            0, 
-            3,  // means number of coordinaes [ (x,y,z) -> 3] [ (x,y) -> 2]
-            gl::FLOAT, 
-            gl::FALSE, 
-            std::mem::size_of::<[f32;3]>() as i32, 
-            null()
-        );
-        gl::EnableVertexAttribArray(0);
-
-        // Chk for OpenGL Error
-        let err = gl::GetError();
-        if err != gl::NO_ERROR {
-            eprintln!("OpenGL Error!");
-        }
-    }
+    let mut glfw = glfw::init(fail_on_errors!()).expect("Failed to initialize GLFW");
+    let (mut window, events) = glfw
+        .create_window(800, 600, "Textured Shape", glfw::WindowMode::Windowed)
+        .expect("Failed to create GLFW window");
 
     window.make_current();
     window.set_key_polling(true);
 
-    // Window Session
-    while !window.should_close(){
-        
-        // Double Buffer
-        window.swap_buffers();
-        glfw_initialized.poll_events();
+    gl::load_with(|s| window.get_proc_address(s));
 
-        unsafe {
-            gl::Viewport(0, 0, screen_width, screen_height);
-            gl::Clear(gl::COLOR_BUFFER_BIT);        
-            gl::ClearColor(0.1, 0.1, 0.2, 1.0);
+    let vertex_shader_path = "src/glsl/texture_v.vert";
+    let fragment_shader_path = "src/glsl/texture_f.frag";
 
-            // Do the Shaders Part
-            
-            // 1. 
-            let my_vertex_shader = gl::CreateShader(gl::VERTEX_SHADER);
-            gl::ShaderSource(
-                my_vertex_shader,
-                1,
-                &c_vertex_shader.to_string().as_bytes().as_ptr().cast(), 
-                std::ptr::null()
-            );
-            gl::CompileShader(my_vertex_shader);
+    let mut vertex_code = String::new();
+    File::open(vertex_shader_path)
+        .expect("Failed to read vertex shader")
+        .read_to_string(&mut vertex_code)
+        .unwrap();
 
-            let my_fragment_shader = gl::CreateShader(gl::FRAGMENT_SHADER);
-            gl::ShaderSource(
-                my_fragment_shader, 
-                1, 
-                &c_fragment_shader.to_string().as_bytes().as_ptr().cast() , 
-                std::ptr::null());
-            gl::CompileShader(my_fragment_shader);
+    let mut fragment_code = String::new();
+    File::open(fragment_shader_path)
+        .expect("Failed to read fragment shader")
+        .read_to_string(&mut fragment_code)
+        .unwrap();
 
-            // lets create a program
-            let shader_program1 = gl::CreateProgram();
-            gl::AttachShader(shader_program1, my_vertex_shader);
-            gl::AttachShader(shader_program1, my_fragment_shader);
-            gl::LinkProgram(shader_program1);
+    let shader = Shader::new(&vertex_code, &fragment_code);
 
-            gl::UseProgram(shader_program1);
-            // gl::BindVertexArray(vao);
+    // Position, Color, TexCoords
+    let vertices: [f32; 32] = [
+        // positions      // colors       // texture coords
+         0.5,  0.5, 0.0,   1.0, 0.0, 0.0,   1.0, 1.0, // top right
+         0.5, -0.5, 0.0,   0.0, 1.0, 0.0,   1.0, 0.0, // bottom right
+        -0.5, -0.5, 0.0,   0.0, 0.0, 1.0,   0.0, 0.0, // bottom left
+        -0.5,  0.5, 0.0,   1.0, 1.0, 0.0,   0.0, 1.0  // top left
+    ];
 
-            // Delete Shaders 
-            gl::DeleteShader(my_vertex_shader);
-            gl::DeleteShader(my_fragment_shader);
+    let indices: [u32; 6] = [0, 1, 3, 1, 2, 3];
 
-            // Draw the Elements
-            gl::DrawElements(
-                gl::TRIANGLES, 
-                6,  // number of indices
-                gl::UNSIGNED_INT, 
-                std::ptr::null());
-            // gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+    let (mut vao, mut vbo, mut ebo) = (0, 0, 0);
+    unsafe {
+        gl::GenVertexArrays(1, &mut vao);
+        gl::GenBuffers(1, &mut vbo);
+        gl::GenBuffers(1, &mut ebo);
 
-            // 2. 
-            let my_vertex_shader1 = gl::CreateShader(gl::VERTEX_SHADER);
-            gl::ShaderSource(
-                my_vertex_shader1,
-                1,
-                &c_vertex_shader.to_string().as_bytes().as_ptr().cast(), 
-                std::ptr::null()
-            );
-            gl::CompileShader(my_vertex_shader1);
+        gl::BindVertexArray(vao);
 
-            let my_fragment_shader1 = gl::CreateShader(gl::FRAGMENT_SHADER);
-            gl::ShaderSource(
-                my_fragment_shader, 
-                1, 
-                &c_fragment_shader1.to_string().as_bytes().as_ptr().cast() , 
-                std::ptr::null());
-            gl::CompileShader(my_fragment_shader1);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (vertices.len() * std::mem::size_of::<f32>()) as isize,
+            vertices.as_ptr() as *const _,
+            gl::STATIC_DRAW,
+        );
 
-            // lets create a program
-            let shader_program2 = gl::CreateProgram();
-            gl::AttachShader(shader_program2, my_vertex_shader1);
-            gl::AttachShader(shader_program2, my_fragment_shader1);
-            gl::LinkProgram(shader_program2);
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+        gl::BufferData(
+            gl::ELEMENT_ARRAY_BUFFER,
+            (indices.len() * std::mem::size_of::<u32>()) as isize,
+            indices.as_ptr() as *const _,
+            gl::STATIC_DRAW,
+        );
 
-            gl::UseProgram(shader_program2);
-            // gl::BindVertexArray(vao1);
+        // positions
+        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 8 * std::mem::size_of::<f32>() as i32, null());
+        gl::EnableVertexAttribArray(0);
+        // colors
+        gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, 8 * std::mem::size_of::<f32>() as i32, (3 * std::mem::size_of::<f32>()) as *const _);
+        gl::EnableVertexAttribArray(1);
+        // texture coords
+        gl::VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, 8 * std::mem::size_of::<f32>() as i32, (6 * std::mem::size_of::<f32>()) as *const _);
+        gl::EnableVertexAttribArray(2);
+    }
 
-            // Delete Shaders 
-            gl::DeleteShader(my_vertex_shader1);
-            gl::DeleteShader(my_fragment_shader1);
+    let img = image::open("G:\\OpenGL-YT\\openglyt\\src\\assets\\texture.jpg").expect("Failed to load texture");
+    let img = img.flipv().into_rgba8();
+    let (width, height) = img.dimensions();
+    let data = img.as_raw();
 
-            // Draw the Elements
-            gl::DrawElements(
-                gl::TRIANGLES, 
-                6,  // number of indices
-                gl::UNSIGNED_INT, 
-                std::ptr::null());
-            gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+    let mut texture = 0;
+    unsafe {
+        gl::GenTextures(1, &mut texture);
+        gl::BindTexture(gl::TEXTURE_2D, texture);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
 
-        }
+        gl::TexImage2D(
+            gl::TEXTURE_2D,
+            0,
+            gl::RGBA as i32,
+            width as i32,
+            height as i32,
+            0,
+            gl::RGBA,
+            gl::UNSIGNED_BYTE,
+            data.as_ptr() as *const _,
+        );
+        gl::GenerateMipmap(gl::TEXTURE_2D);
+    }
 
-        for ( _ , event ) in glfw::flush_messages(&events){
-            match event {
-                glfw::WindowEvent::Key(  Key::Escape, _, Action::Press, _ ) => {
-                    window.set_should_close(true);
-                },
-                _ => {
-                    println!("Wrong Key Press!, Press (Esc) Key to Close the window");
-                }
+    while !window.should_close() {
+        glfw.poll_events();
+        for (_, event) in glfw::flush_messages(&events) {
+            if let glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) = event {
+                window.set_should_close(true);
             }
         }
+
+        unsafe {
+            gl::ClearColor(0.1, 0.1, 0.1, 1.0);
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+
+            gl::UseProgram(shader.id);
+            gl::BindTexture(gl::TEXTURE_2D, texture);
+            gl::BindVertexArray(vao);
+            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null());
+        }
+
+        window.swap_buffers();
     }
 }

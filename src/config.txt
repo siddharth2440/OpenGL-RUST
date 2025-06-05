@@ -1,0 +1,2 @@
+Rectangle -> Green Color
+Rhombus -> Red Color
