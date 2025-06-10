@@ -1,8 +1,9 @@
 use std::{ffi::CString, fs::File, io::Read, process, ptr::null};
-use glfw::{Action, Context, Key, fail_on_errors};
+use glfw::{fail_on_errors, ffi::glfwGetTime, Action, Context, Key};
+use glm::{ext::{rotate, translate}, mat4, Mat4};
 use image::GenericImageView;
 
-use crate::{lib::load_image::load_image_into_cpu, shaders::shader::Shader, textures::texture::Texture};
+use crate::{lib::load_image::load_image_into_cpu, shaders::shader::Shader, textures::texture::Texture, utils::coordinates::{TexturePath, Vertices}};
 
 mod shaders {
     pub mod shader;
@@ -16,10 +17,22 @@ mod lib {
     pub mod load_image;
 }
 
+mod utils {
+    pub mod coordinates;
+    pub mod payload;
+}
+
 fn main() {
+
+    type _VertexObject = ( u32, u32, u32);
+    type ShapeVerticesType = [f32; 12];
+    type ColorVerticesType = [f32; 12];
+    type TextureVerticesType = [f32; 8];
+    type IndexType = [u32; 6];
+
     let mut glfw = glfw::init(fail_on_errors!()).expect("Failed to initialize GLFW");
     let (mut window, events) = glfw
-        .create_window(800, 600, "Textured Shape", glfw::WindowMode::Windowed)
+        .create_window(1200, 900, "Textured Shape", glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window");
 
     window.make_current();
@@ -43,8 +56,24 @@ fn main() {
         .unwrap();
 
     let shader = Shader::new(&vertex_code, &fragment_code);
+    
+    let mut x_offset: f32 = -1.0; // Start from the left
+    let speed: f32 = 0.001; // Adjust speed
 
-    // Position, Color, TexCoords
+    let mut angle: f32 = 0.0; // Initial rotation angle
+    let rotation_speed: f32 = 0.001; // Adjust speed
+
+    #[derive(Debug)]
+    struct ShapeVertices {
+        shape_vertices: [f32; 12],
+        shape_color_vertices: [f32; 12],
+        shape_texture_vertices: [f32; 8],
+        shape_indices: IndexType
+    }
+
+    // ------------------------------------------------   Coordinates ------------------------------------------   
+    let spacing = 1.2;
+    // Rectangle
     let vertices: [f32; 32] = [
         // positions      // colors       // texture coords
          0.5,  0.5, 0.0,   1.0, 0.0, 0.0,   1.0, 1.0, // top right
@@ -53,78 +82,223 @@ fn main() {
         -0.5,  0.5, 0.0,   1.0, 1.0, 0.0,   0.0, 1.0  // top left
     ];
 
-    let indices: [u32; 6] = [0, 1, 3, 1, 2, 3];
+    let mut shapes: Vec<ShapeVertices> = Vec::new();
 
-    let (mut vao, mut vbo, mut ebo) = (0, 0, 0);
-    unsafe {
-        gl::GenVertexArrays(1, &mut vao);
-        gl::GenBuffers(1, &mut vbo);
-        gl::GenBuffers(1, &mut ebo);
+    let _rectange_vertices: ShapeVerticesType = [
+       -0.25 - spacing, -0.25, 0.0,
+        0.25 - spacing, -0.25, 0.0,
+        0.25 - spacing,  0.25, 0.0,
+        -0.25 - spacing,  0.25, 0.0
+    ];
 
-        gl::BindVertexArray(vao);
+    let _rectangle_color: ColorVerticesType = [
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0,
+        1.0, 1.0, 0.0
+    ];
 
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (vertices.len() * std::mem::size_of::<f32>()) as isize,
-            vertices.as_ptr() as *const _,
-            gl::STATIC_DRAW,
-        );
+    let _rectangle_texs: TextureVerticesType = [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0
+    ];
 
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-        gl::BufferData(
-            gl::ELEMENT_ARRAY_BUFFER,
-            (indices.len() * std::mem::size_of::<u32>()) as isize,
-            indices.as_ptr() as *const _,
-            gl::STATIC_DRAW,
-        );
+    //REctangle
+    let indices: IndexType = [
+        0, 1, 2, 
+        2, 3, 0
+    ];
 
-        // positions
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 8 * std::mem::size_of::<f32>() as i32, null());
-        gl::EnableVertexAttribArray(0);
-        // colors
-        gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, 8 * std::mem::size_of::<f32>() as i32, (3 * std::mem::size_of::<f32>()) as *const _);
-        gl::EnableVertexAttribArray(1);
-        // texture coords
-        gl::VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, 8 * std::mem::size_of::<f32>() as i32, (6 * std::mem::size_of::<f32>()) as *const _);
-        gl::EnableVertexAttribArray(2);
+    shapes.push(ShapeVertices{
+        shape_color_vertices: _rectangle_color,
+        shape_texture_vertices: _rectangle_texs,
+        shape_vertices: _rectange_vertices,
+        shape_indices: indices
+    });
+
+    // Rhombus 
+    let _rhombus_vertices: ShapeVerticesType = [
+        // Positions 
+       -0.25, -0.25, 0.0, // Left
+         0.25, -0.25, 0.0, // Top
+        0.25,  0.25, 0.0, // Right
+        -0.25,  0.25, 0.0  // Bottom
+    ];
+
+    let _rhombus_tex_coordinates: TextureVerticesType = [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0
+    ];
+
+    let _rhombus_colors: ColorVerticesType = [
+        1.0, 0.0, 0.0,  // Red
+        0.0, 1.0, 0.0,  // Green
+        0.0, 0.0, 1.0,  // Blue
+        1.0, 1.0, 0.0   // Yellow
+    ];
+
+    let _rhombus_indices: IndexType = [
+        0, 1, 2, 
+        2, 3, 0
+    ];
+
+    shapes.push(ShapeVertices{
+        shape_color_vertices: _rhombus_colors,
+        shape_texture_vertices: _rhombus_tex_coordinates,
+        shape_vertices: _rhombus_vertices,
+        shape_indices: _rhombus_indices
+    });
+
+    // Parallelogram 
+    let _parallelogram_vertics: ShapeVerticesType = [
+        -0.6,  0.4, 0.0,  // Top-left
+         0.4,  0.4, 0.0, // Top-right
+        -0.4, -0.4, 0.0, // Bottom-left
+         0.6, -0.4, 0.0  // Bottom-right
+    ];
+
+    let _parallelogram_tex_coordinates: TextureVerticesType = [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0
+    ];
+
+    let _parallelogram_colors: ColorVerticesType = [
+        0.5, 0.0, 0.5,
+        0.0, 0.5, 0.5,
+        0.5, 0.5, 0.0,
+        1.0, 0.0, 0.5
+    ];
+
+    let _parallelogram_indices: IndexType = [
+        8, 9, 10,
+        10, 11, 8,
+    ];
+
+    shapes.push(ShapeVertices{
+        shape_color_vertices: _parallelogram_colors,
+        shape_texture_vertices: _parallelogram_tex_coordinates,
+        shape_vertices: _parallelogram_vertics,
+        shape_indices: _parallelogram_indices
+    });
+
+    #[derive(Debug)]
+    struct Object {
+        shape_vertices_vbo: u32, 
+        color_vertices_vbo: u32, 
+        texture_vertices_vbo: u32, 
+        shape_ebo: u32, 
+        shape_vao: u32
     }
 
-    // let img = image::open("G:\\OpenGL-YT\\openglyt\\src\\assets\\wall.jpg").expect("Failed to load texture");
-    // let img_buf = img.flipv().into_rgba8();
-    // let (width, height) = img.dimensions();
-    // let data = img_buf.as_raw();
+    // 3 shapes To draw and bind them to our textues
+    let mut vertexbuffers:Vec<Object> = Vec::new();
+    vertexbuffers.push( Object { 
+        color_vertices_vbo:0, shape_vertices_vbo:0, texture_vertices_vbo:0 , shape_ebo:0, shape_vao:0
+    });
+    vertexbuffers.push( Object { 
+        color_vertices_vbo:0, shape_vertices_vbo:0, texture_vertices_vbo:0 , shape_ebo:0, shape_vao:0  
+    });
+    vertexbuffers.push( Object { 
+        color_vertices_vbo:0, shape_vertices_vbo:0, texture_vertices_vbo:0 , shape_ebo:0, shape_vao:0 
+    });
 
-    let ( width, height, data) = load_image_into_cpu("G:\\OpenGL-YT\\openglyt\\src\\assets\\wall.jpg");
-    // println!("Width -> {:?}",width);
-    // println!("Height -> {:?}",height);
-    // println!("Image_data -> {:?}",data);
+    let total_objects = vertexbuffers.iter().fold(0, | acc , _x | acc + 1 );
+    println!("Total Vertex Objects {:?}", total_objects);
+    if total_objects == 3 {
+        println!("Vertex Buffers Initialized Properly! -> {:?}",total_objects);
+    } else {
+        println!(" Vertex Buffers is not initialized properly ");
+        process::exit(1);
+    }
+    
+    let _texes = vec![ "wall.jpg", "texture.jpg" ];
+    let _texture_paths = TexturePath::new(_texes);
 
-    // let mut texture = 0;
+    let _by_direct_rectangle_vertices= Vertices::new(&vertices, &indices);
+
+    let mut index = 0;
+    let mut shape_idx: usize = 0;
+    // Create our buffers
+    let mut obj_iter = vertexbuffers.iter_mut();
+    while let Some( obj ) = obj_iter.next() {
+        unsafe {
+            // ---------------------------------------------- Generate Vertex Buffers -----------------------------------------------------------------------
+
+            // Vertex Array Object
+            gl::GenVertexArrays(1, &mut obj.shape_vao);
+            
+            // Vertex Buffer Object
+            gl::GenBuffers(1, &mut obj.color_vertices_vbo);
+            gl::GenBuffers(1, &mut obj.shape_vertices_vbo);
+            gl::GenBuffers(1, &mut obj.texture_vertices_vbo);
+
+            // Element Buffer Object -> EBO
+            gl::GenBuffers(1, &mut obj.shape_ebo);
+
+
+            // Bind Buffers
+            gl::BindVertexArray(obj.shape_vao);
+
+            // Position VBO
+            gl::BindBuffer(gl::ARRAY_BUFFER, obj.shape_vertices_vbo);
+            gl::BufferData(
+                gl::ARRAY_BUFFER, 
+                std::mem::size_of_val( &shapes[shape_idx].shape_vertices ) as isize, 
+                (&shapes[shape_idx].shape_vertices).as_ptr() as *const _, 
+                gl::STATIC_DRAW
+            );
+            gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 0, null());
+            gl::EnableVertexAttribArray(0);
+
+            // Color VBO
+            gl::BindBuffer(gl::ARRAY_BUFFER, obj.color_vertices_vbo);
+            gl::BufferData(
+                gl::ARRAY_BUFFER, 
+                std::mem::size_of_val(&shapes[shape_idx].shape_color_vertices) as isize, 
+                (&shapes[shape_idx].shape_color_vertices).as_ptr() as *const _, 
+                gl::STATIC_DRAW
+            );
+            gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, 0, null());
+            gl::EnableVertexAttribArray(1);
+
+            // Texture VBO
+            gl::BindBuffer(gl::ARRAY_BUFFER, obj.texture_vertices_vbo);
+            gl::BufferData(
+                gl::ARRAY_BUFFER, 
+                std::mem::size_of_val(&shapes[shape_idx].shape_texture_vertices) as isize, 
+                (&shapes[shape_idx].shape_texture_vertices).as_ptr() as *const _, 
+                gl::STATIC_DRAW
+            );
+            gl::VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, 0, null());
+            gl::EnableVertexAttribArray(2);
+
+            // Element Buffer
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, obj.shape_ebo);
+            gl::BufferData(
+                gl::ELEMENT_ARRAY_BUFFER, 
+                std::mem::size_of_val(&shapes[shape_idx].shape_indices) as isize, 
+                (&shapes[shape_idx].shape_indices).as_ptr() as *const _, 
+                gl::STATIC_DRAW
+            );
+
+            index = index + 1;
+            shape_idx = shape_idx + 1;
+        }
+    }
+
+    vertexbuffers.iter().for_each( | obj | {
+        println!("VertexObject -> {:#?}", obj);
+    });
+
     let texture = Texture::new("G:\\OpenGL-YT\\openglyt\\src\\assets\\wall.jpg");
     println!("Texture id -> {:?}", texture.id );
-    // unsafe {
 
-    //     gl::GenTextures(1, &mut texture);
-    //     gl::BindTexture(gl::TEXTURE_2D, texture);
-    //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
-    //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
-    //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-    //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-
-    //     gl::TexImage2D(
-    //         gl::TEXTURE_2D,
-    //         0,
-    //         gl::RGBA as i32,
-    //         width as i32,
-    //         height as i32,
-    //         0,
-    //         gl::RGBA,
-    //         gl::UNSIGNED_BYTE,
-    //         data.as_ptr() as *const _,
-    //     );
-    //     gl::GenerateMipmap(gl::TEXTURE_2D);
-    // }
 
     while !window.should_close() {
         glfw.poll_events();
@@ -137,13 +311,40 @@ fn main() {
         unsafe {
             gl::ClearColor(0.1, 0.1, 0.1, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
+            
+            for ( _i, _buffers) in vertexbuffers.iter().enumerate() {
 
-            gl::UseProgram(shader.id);
-            gl::BindTexture(gl::TEXTURE_2D, texture.id);
-            gl::BindVertexArray(vao);
-            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null());
+                gl::BindVertexArray(_buffers.shape_vao);
+                gl::BindTexture(gl::TEXTURE_2D, texture.id);
+
+                x_offset += speed; // Move right
+                // if x_offset > 0.9 { // Reset when reaching the right edge
+                //     x_offset = -0.9;
+                // }
+
+                angle += rotation_speed; // Rotate continuously
+                // if angle > 360.0 { // Reset when completing a full circle
+                //     angle = 0.0;
+                // }
+
+                // Transformations
+                let mut transform = mat4(
+                    1.0, 0.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0, 0.0,
+                    0.0, 0.0, 1.0, 0.0,
+                    0.0, 0.0, 0.0, 1.0,
+                );
+                transform = translate(&transform, glm::vec3(x_offset, -0.1, 0.0));
+                transform = rotate(&transform , glm::radians(angle) ,glm::vec3( 0.0, 0.0, 1.0 ));
+                
+                gl::UseProgram(shader.id);
+                let get_transform_name = CString::new("transform").unwrap();
+                let get_transform_location = gl::GetUniformLocation(shader.id, get_transform_name.as_ptr() );
+                gl::UniformMatrix4fv(get_transform_location, 1, gl::FALSE, transform.as_array_mut().as_mut_ptr() as *const _ );
+                
+                gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null());
+            }
         }
-
         window.swap_buffers();
     }
 }
