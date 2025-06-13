@@ -1,4 +1,4 @@
-use std::{ffi::CString, fs::File, io::Read, process, ptr::null};
+use std::{ffi::CString, fs::File, io::Read, process, ptr::null, time::{SystemTime, UNIX_EPOCH}};
 use glfw::{fail_on_errors, ffi::glfwGetTime, Action, Context, Key};
 use glm::{ext::{rotate, translate}, mat4, Mat4};
 use image::GenericImageView;
@@ -72,7 +72,7 @@ fn main() {
     }
 
     // ------------------------------------------------   Coordinates ------------------------------------------   
-    let spacing = 1.2;
+    let spacing = 0.0;
     // Rectangle
     let vertices: [f32; 32] = [
         // positions      // colors       // texture coords
@@ -85,10 +85,10 @@ fn main() {
     let mut shapes: Vec<ShapeVertices> = Vec::new();
 
     let _rectange_vertices: ShapeVerticesType = [
-       -0.25 - spacing, -0.25, 0.0,
-        0.25 - spacing, -0.25, 0.0,
-        0.25 - spacing,  0.25, 0.0,
-        -0.25 - spacing,  0.25, 0.0
+         -0.25, -0.25, 0.0,  // bottom left
+             0.25, -0.25, 0.0,  // bottom right
+             0.25,  0.25, 0.0,  // top right
+            -0.25,  0.25, 0.0   // top left
     ];
 
     let _rectangle_color: ColorVerticesType = [
@@ -99,9 +99,9 @@ fn main() {
     ];
 
     let _rectangle_texs: TextureVerticesType = [
-        0.0, 0.0,
-        1.0, 0.0,
-        1.0, 1.0,
+        0.0, 0.0, 
+        1.0, 0.0, 
+        1.0, 1.0, 
         0.0, 1.0
     ];
 
@@ -120,17 +120,16 @@ fn main() {
 
     // Rhombus 
     let _rhombus_vertices: ShapeVerticesType = [
-        // Positions 
-       -0.25, -0.25, 0.0, // Left
-         0.25, -0.25, 0.0, // Top
-        0.25,  0.25, 0.0, // Right
-        -0.25,  0.25, 0.0  // Bottom
+         -0.3, -0.3, 0.0,
+             0.3, -0.3, 0.0,
+             0.4,  0.3, 0.0,
+            -0.2,  0.3, 0.0,
     ];
 
     let _rhombus_tex_coordinates: TextureVerticesType = [
-        0.0, 0.0,
-        1.0, 0.0,
-        1.0, 1.0,
+        0.0, 0.0, 
+        1.0, 0.0, 
+        1.0, 1.0, 
         0.0, 1.0
     ];
 
@@ -155,16 +154,16 @@ fn main() {
 
     // Parallelogram 
     let _parallelogram_vertics: ShapeVerticesType = [
-        -0.6,  0.4, 0.0,  // Top-left
-         0.4,  0.4, 0.0, // Top-right
-        -0.4, -0.4, 0.0, // Bottom-left
-         0.6, -0.4, 0.0  // Bottom-right
+            -0.1, -0.1, 0.0,
+             0.1, -0.1, 0.0,
+             0.2,  0.1, 0.0,
+            -0.3,  0.1, 0.0,
     ];
 
     let _parallelogram_tex_coordinates: TextureVerticesType = [
-        0.0, 0.0,
-        1.0, 0.0,
-        1.0, 1.0,
+        0.0, 0.0, 
+        1.0, 0.0, 
+        1.0, 1.0, 
         0.0, 1.0
     ];
 
@@ -176,8 +175,8 @@ fn main() {
     ];
 
     let _parallelogram_indices: IndexType = [
-        8, 9, 10,
-        10, 11, 8,
+        0, 1, 2,
+        2, 3, 0,
     ];
 
     shapes.push(ShapeVertices{
@@ -256,6 +255,7 @@ fn main() {
             gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 0, null());
             gl::EnableVertexAttribArray(0);
 
+            index = index + 1;
             // Color VBO
             gl::BindBuffer(gl::ARRAY_BUFFER, obj.color_vertices_vbo);
             gl::BufferData(
@@ -267,6 +267,7 @@ fn main() {
             gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, 0, null());
             gl::EnableVertexAttribArray(1);
 
+            index = index + 1;
             // Texture VBO
             gl::BindBuffer(gl::ARRAY_BUFFER, obj.texture_vertices_vbo);
             gl::BufferData(
@@ -298,6 +299,8 @@ fn main() {
 
     let texture = Texture::new("G:\\OpenGL-YT\\openglyt\\src\\assets\\wall.jpg");
     println!("Texture id -> {:?}", texture.id );
+    let texture_2 = Texture::new("G:\\OpenGL-YT\\openglyt\\src\\assets\\texture.jpg");
+    println!("Texture_2 id -> {:?}", texture_2.id );
 
 
     while !window.should_close() {
@@ -309,42 +312,47 @@ fn main() {
         }
 
         unsafe {
-            gl::ClearColor(0.1, 0.1, 0.1, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-            
-            for ( _i, _buffers) in vertexbuffers.iter().enumerate() {
+    gl::ClearColor(0.1, 0.1, 0.1, 1.0);
+    gl::Clear(gl::COLOR_BUFFER_BIT);
 
-                gl::BindVertexArray(_buffers.shape_vao);
-                gl::BindTexture(gl::TEXTURE_2D, texture.id);
+    gl::UseProgram(shader.id);
 
-                x_offset += speed; // Move right
-                // if x_offset > 0.9 { // Reset when reaching the right edge
-                //     x_offset = -0.9;
-                // }
+    // Ensure texture unit 0 is used
+    gl::ActiveTexture(gl::TEXTURE0);
+    let tex_loc = CString::new("texture1").unwrap();
+    let tex_uniform = gl::GetUniformLocation(shader.id, tex_loc.as_ptr());
+    gl::Uniform1i(tex_uniform, 0); // Use GL_TEXTURE0
 
-                angle += rotation_speed; // Rotate continuously
-                // if angle > 360.0 { // Reset when completing a full circle
-                //     angle = 0.0;
-                // }
+    for (i, obj) in vertexbuffers.iter().enumerate() {
+        gl::BindVertexArray(obj.shape_vao);
 
-                // Transformations
-                let mut transform = mat4(
-                    1.0, 0.0, 0.0, 0.0,
-                    0.0, 1.0, 0.0, 0.0,
-                    0.0, 0.0, 1.0, 0.0,
-                    0.0, 0.0, 0.0, 1.0,
-                );
-                transform = translate(&transform, glm::vec3(x_offset, -0.1, 0.0));
-                transform = rotate(&transform , glm::radians(angle) ,glm::vec3( 0.0, 0.0, 1.0 ));
-                
-                gl::UseProgram(shader.id);
-                let get_transform_name = CString::new("transform").unwrap();
-                let get_transform_location = gl::GetUniformLocation(shader.id, get_transform_name.as_ptr() );
-                gl::UniformMatrix4fv(get_transform_location, 1, gl::FALSE, transform.as_array_mut().as_mut_ptr() as *const _ );
-                
-                gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null());
-            }
+        // Bind texture for the shape
+        if i % 2 == 0 {
+            gl::BindTexture(gl::TEXTURE_2D, texture.id); // wall.jpg
+        } else {
+            gl::BindTexture(gl::TEXTURE_2D, texture_2.id); // texture.jpg
         }
+
+        // Create transformation
+        let x_offset = -0.7 + i as f32 * 0.7;
+        let y_offset = 0.0;
+
+        let mut transform = mat4(
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        );
+
+        transform = translate(&transform, glm::vec3(x_offset, y_offset, 0.0));
+
+        let get_transform_name = CString::new("transform").unwrap();
+        let get_transform_location = gl::GetUniformLocation(shader.id, get_transform_name.as_ptr());
+        gl::UniformMatrix4fv(get_transform_location, 1, gl::FALSE, transform.as_array_mut().as_mut_ptr() as *const _);
+
+        gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null());
+    }
+}
         window.swap_buffers();
     }
 }
