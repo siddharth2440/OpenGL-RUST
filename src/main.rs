@@ -1,9 +1,9 @@
 use std::{ffi::CString, fs::File, io::Read, process, ptr::null, time::{SystemTime, UNIX_EPOCH}};
-use glfw::{fail_on_errors, ffi::glfwGetTime, Action, Context, Key};
+use glfw::{fail_on_errors, ffi::glfwGetTime, Action, Context, Key, WindowEvent};
 use glm::{ext::{rotate, translate}, mat4, Mat4};
 use image::GenericImageView;
 
-use crate::{lib::load_image::load_image_into_cpu, shaders::shader::Shader, textures::texture::Texture, utils::coordinates::{TexturePath, Vertices}};
+use crate::{camera::camera::Camera, lib::load_image::load_image_into_cpu, shaders::shader::Shader, textures::texture::Texture, utils::coordinates::{TexturePath, Vertices}};
 
 mod shaders {
     pub mod shader;
@@ -20,6 +20,10 @@ mod lib {
 mod utils {
     pub mod coordinates;
     pub mod payload;
+}
+
+mod camera {
+    pub mod camera;
 }
 
 fn main() {
@@ -297,17 +301,55 @@ fn main() {
         println!("VertexObject -> {:#?}", obj);
     });
 
+    let mut camera = Camera::new(
+        glm::vec3(0.0, 0.0, 3.0),  // Position
+        glm::vec3(0.0, 1.0, 0.0),  // Up
+        -90.0,                     // Yaw
+        0.0,                       // Pitch
+    );
+    let mut last_frame = 0.0f32;
+
+
+
     let texture = Texture::new("G:\\OpenGL-YT\\openglyt\\src\\assets\\wall.jpg");
     println!("Texture id -> {:?}", texture.id );
     let texture_2 = Texture::new("G:\\OpenGL-YT\\openglyt\\src\\assets\\texture.jpg");
     println!("Texture_2 id -> {:?}", texture_2.id );
 
+    let mut last_time = unsafe { glfwGetTime() };
+    let mut last_x = 600.0;
+    let mut last_y = 450.0;
+    let mut first_mouse = true;
+
 
     while !window.should_close() {
+
+        let current_time = unsafe { glfwGetTime() };
+        let delta_time = (current_time - last_time) as f32;
+        last_time = current_time;
+
         glfw.poll_events();
         for (_, event) in glfw::flush_messages(&events) {
-            if let glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) = event {
-                window.set_should_close(true);
+             match event {
+                WindowEvent::Key(Key::Escape, _, Action::Press, _) => window.set_should_close(true),
+                WindowEvent::Key(Key::W, _, Action::Press, _) => camera.process_keyboard("FORWARD", delta_time),
+                WindowEvent::Key(Key::S, _, Action::Press, _) => camera.process_keyboard("BACKWARD", delta_time),
+                WindowEvent::Key(Key::A, _, Action::Press, _) => camera.process_keyboard("LEFT", delta_time),
+                WindowEvent::Key(Key::D, _, Action::Press, _) => camera.process_keyboard("RIGHT", delta_time),
+                WindowEvent::CursorPos(xpos, ypos) => {
+                    if first_mouse {
+                        last_x = xpos as f32;
+                        last_y = ypos as f32;
+                        first_mouse = false;
+                    }
+                    let xoffset = xpos as f32 - last_x;
+                    let yoffset = last_y - ypos as f32;
+                    last_x = xpos as f32;
+                    last_y = ypos as f32;
+
+                    camera.process_mouse_movement(xoffset, yoffset);
+                }
+                _ => {}
             }
         }
 
@@ -349,6 +391,13 @@ fn main() {
         let get_transform_name = CString::new("transform").unwrap();
         let get_transform_location = gl::GetUniformLocation(shader.id, get_transform_name.as_ptr());
         gl::UniformMatrix4fv(get_transform_location, 1, gl::FALSE, transform.as_array_mut().as_mut_ptr() as *const _);
+
+        let view = camera.get_view_matrix();
+        let projection = camera.get_projection_matrix(800.0 / 600.0); // Adjust to window size
+        let mut view_proj = projection * view;
+
+        let view_proj_location = gl::GetUniformLocation(shader.id, CString::new("viewProj").unwrap().as_ptr());
+        gl::UniformMatrix4fv(view_proj_location, 1, gl::FALSE, view_proj.as_array_mut().as_mut_ptr() as *const _);
 
         gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null());
     }
