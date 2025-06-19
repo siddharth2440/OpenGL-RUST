@@ -22,11 +22,15 @@ impl Shader {
 
         // If no Error then
         Self::compile_shader(vertex_shader);
+        println!("Vertex shader compile success!");
         Self::compile_shader(fragment_shader);
-        
+        println!("Fragment shader compile success!");
+
         // Chk for Error
         Self::chk_for_any_err(vertex_shader);
+        println!("Vertex shader compile status - No Error!");
         Self::chk_for_any_err(fragment_shader);
+        println!("Fragment shader compile status - No Error!");
 
         let shader_program = unsafe {
             let shader_program_id = gl::CreateProgram();
@@ -63,7 +67,7 @@ impl Shader {
     }
 
     fn compile_shader( shader: u32 ){
-        unsafe { 
+        unsafe {
             gl::CompileShader(shader); 
         }
     }
@@ -72,13 +76,13 @@ impl Shader {
         let mut success = 0;
         unsafe {
             gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
-            // println!("Success -> {:?}", success);
+            println!("Success -> {:?}", success);
         }
-        let mut log: Vec<i8> = vec![ 0; 512 ];
+        let mut log = [ 0; 512  ];
         if success == 0 {
             unsafe { gl::GetShaderInfoLog(shader, 512, null_mut(), log.as_mut_ptr() )};
             println!("Log :-> {:?}", log);
-            println!("Shader Error! {:?}",log);
+            println!("Shader Error! {:?}", log );
         }
     }
 }
